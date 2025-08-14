@@ -22,10 +22,10 @@ Route::post('/contact-us', [ContactController::class, 'store']);
 
 Route::middleware([JwtAuthMiddleware::class])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::post('user/update-password', [AuthController::class, 'updatePassword']);
+    Route::post('/update-password', [AuthController::class, 'updatePassword']);
 
     // Route::get('/user/profile', [UserController::class, 'getProfile']);
-    Route::post('/user/update-profile', [UserController::class, 'updateProfile']);
+    Route::post('/update-profile', [UserController::class, 'updateProfile']);
 
     
     // ADMIN Routes (Only "admin" role can access)

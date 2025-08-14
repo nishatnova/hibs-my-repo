@@ -9,7 +9,9 @@ use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
-
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
@@ -103,52 +105,106 @@ class UserController extends Controller
     public function updateProfile(Request $request)
     {
         try {
-            $user = User::find(Auth::id());
-
+            $user = Auth::user();
             if (!$user) {
-                return $this->sendError('User not found.', [], 404);
-            }
-
-            $request->validate([
-                'name' => 'nullable|string|max:255',
-                'email' => 'nullable|email|unique:users,email' . $user->id,
-                'phone' => 'nullable|string',  
-                'profile_photo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:10240', 
-            ]);
-
-            $data = [];
-
-            if ($request->has('name') && $request->name !== null) {
-                $data['name'] = $request->name;
+                 return $this->sendError('User not found.', [], 404);
             }
             
-            if ($request->has('email') && $request->email !== null) {
-                $data['email'] = $request->email;
+            // Parse JSON data efficiently
+            $jsonData = $request->input('data');
+            if (!$jsonData || !($data = json_decode($jsonData, true))) {
+                 return $this->sendError('Invalid user data format', [], 400);
             }
-
-            if ($request->has('phone') && $request->phone !== null) {
-                $data['phone'] = $request->phone;
+            
+            // Pre-compile validation rules (avoid string concatenation in validation)
+            $rules = [
+                'name'  => ['nullable', 'string', 'max:255'],
+                'email' => ['nullable', 'email', 'unique:users,email,' . $user->id],
+                'phone' => ['nullable', 'string', 'max:20'],
+            ];
+            
+            // Validate JSON data first
+            $validator = Validator::make($data, $rules);
+            if ($validator->fails()) {
+                return $this->sendError($validator->errors()->first(), [], 400);
             }
-    
+            
+            // Validate file separately only if exists
             if ($request->hasFile('profile_photo')) {
+                $fileValidator = Validator::make(['file' => $request->file('profile_photo')], [
+                    'file' => ['image', 'mimes:jpeg,png,jpg,gif,svg,webp', 'max:5240']
+                ]);
+                
+                if ($fileValidator->fails()) {
+                    return $this->sendError($fileValidator->errors()->first(), [], 400);
+                }
+            }
+            
+            // Build update array efficiently
+            $updates = [];
+            
+            // Only add non-empty values to update array
+            foreach (['name', 'email', 'phone'] as $field) {
+                if (isset($data[$field]) && !empty(trim($data[$field]))) {
+                    $updates[$field] = trim($data[$field]);
+                }
+            }
+            
+            // Handle file upload
+            $oldPhotoPath = null;
+            if ($request->hasFile('profile_photo')) {
+                $oldPhotoPath = $user->getRawOriginal('profile_photo');
+                
+                // Generate unique filename
                 $file = $request->file('profile_photo');
-                $profilePhotoPath = $file->store('profile_photos', 'public');
-                $data['profile_photo'] = asset('storage/' . $profilePhotoPath);
+                $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                
+                // Store file
+                $path = $file->storeAs('profile_photos', $filename, 'public');
+                $updates['profile_photo'] = 'storage/' . $path;
             }
-    
-            if (!empty($data)) {
-                $user->update($data);
+            
+            // Perform single database update if there are changes
+            if (!empty($updates)) {
+                // Use query builder for faster updates 
+                DB::table('users')
+                    ->where('id', $user->id)
+                    ->update($updates + ['updated_at' => now()]);
+                
+                
+                // Update the current user instance
+                foreach ($updates as $key => $value) {
+                    $user->{$key} = $value;
+                }
             }
-    
-            return $this->sendResponse([
-                'user' => $user,
-            ], 'Profile updated successfully.');
+            
+            // Queue old photo deletion (non-blocking)
+            if ($oldPhotoPath && $oldPhotoPath !== 'profile_photos/user.png') {
+                dispatch(function() use ($oldPhotoPath) {
+                    $storagePath = str_replace('storage/', '', $oldPhotoPath);
+                    if (Storage::disk('public')->exists($storagePath)) {
+                        Storage::disk('public')->delete($storagePath);
+                    }
+                })->afterResponse();
+            }
+            
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            // Return minimal response
+
+            return $this->sendResponse([
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'profile_photo' => $user->profile_photo,
+            ], 'Profile updated successfully.');
+            
+        } catch (ValidationException $e) {
             return $this->sendError($e->validator->errors()->first(), [], 400);
         } catch (\Exception $e) {
-            Log::error("Error updating profile: " . $e->getMessage());
-            return $this->sendError('Error updating profile.' . $e->getMessage(), [], 500);
+             Log::error("Error updating profile: " . $e->getMessage());
+             return $this->sendError('Error updating profile.' . $e->getMessage(), [], 500);
         }
     }
 

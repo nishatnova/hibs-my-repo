@@ -9,7 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
-
+use Illuminate\Support\Facades\Storage;
 
 class User extends Authenticatable implements JWTSubject, MustVerifyEmail
 {
@@ -77,7 +77,40 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     public function getProfilePhotoAttribute($value)
     {
         // If the user has set a profile photo, return the full URL, otherwise return the default one
-        return $value ? asset($value) : asset('profile_photos/user.png');
+        if ($value && $value !== 'profile_photos/user.png') {
+            // If it already starts with 'http', return as is
+            if (str_starts_with($value, 'http')) {
+                return $value;
+            }
+            // Otherwise, add the asset path
+            return asset($value);
+        }
+        
+        return asset('profile_photos/user.png');
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+       
+        static::updating(function ($user) {
+            if ($user->isDirty('profile_photo') && $user->getOriginal('profile_photo')) {
+                $oldPhoto = $user->getOriginal('profile_photo');
+                
+                // Skip default photo deletion
+                if ($oldPhoto && $oldPhoto !== 'profile_photos/user.png') {
+                    // Extract storage path from the database value
+                    $storagePath = str_replace('storage/', '', $oldPhoto);
+                    
+                    // Queue old file deletion
+                    dispatch(function() use ($storagePath) {
+                        if (Storage::disk('public')->exists($storagePath)) {
+                            Storage::disk('public')->delete($storagePath);
+                        }
+                    })->afterResponse();
+                }
+            }
+        });
     }
 
 
