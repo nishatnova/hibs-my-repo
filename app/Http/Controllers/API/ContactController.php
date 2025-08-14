@@ -17,18 +17,28 @@ class ContactController extends Controller
     public function store(Request $request)
     {
         try {
-            $request->validate([
-                'name' => 'required|string|max:255',
-                'email' => 'required|email',
-                'subject' => 'required|string|max:255',
-            ]);
-
-            $contact = Contact::create($request->all());
-
-           Mail::to(env('ADMIN_EMAIL'))->send(new ContactUsMail($contact));
-
+            $rules = [
+                'name' => ['required', 'string', 'max:255'],
+                'email' => ['required', 'email', 'max:191'],
+                'subject' => ['required', 'string', 'max:255'],
+                'message' => ['required', 'string', 'max:5000'],
+            ];
+            
+            $request->validate($rules);
+            
+            // Create contact record
+            $contact = Contact::create($request->only(['name', 'email', 'subject', 'message']));
+            
+            // Queue email sending for better response time (MAJOR PERFORMANCE BOOST)
+            dispatch(function() use ($contact) {
+                Mail::to(env('ADMIN_EMAIL'))->send(new ContactUsMail($contact));
+            })->afterResponse();
+            
+            // Return minimal response data
             return $this->sendResponse([
-                'contact' => $contact
+                'name' => $contact->name,
+                'email' => $contact->email,
+                'subject' => $contact->subject,
             ], 'Your contact request has been submitted successfully!', 201);
 
         } catch (ValidationException $e) {
@@ -39,7 +49,7 @@ class ContactController extends Controller
             return $this->sendError($firstErrorMessages, [], 422);
 
         } catch (\Exception $e) {
-            return $this->sendError('Error during contact submission', [], 500);
+            return $this->sendError('Error during contact submission '. $e->getMessage(), [], 500);
         }
     }
 

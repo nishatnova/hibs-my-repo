@@ -24,6 +24,12 @@ class ContactUsMail extends Mailable
     {
         return $this->subject('New Contact Form Submission')
             ->view('emails.contact_us')
-            ->with('contact', $this->contact);
+            ->with([
+                        'contactName' => $this->contact->name,
+                        'contactEmail' => $this->contact->email,
+                        'contactSubject' => $this->contact->subject,
+                        'contactMessage' => $this->contact->message,
+                        'createdAt' => $this->contact->created_at,
+                    ]);
     }
 }

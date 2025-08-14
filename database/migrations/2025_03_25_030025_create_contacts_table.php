@@ -18,6 +18,10 @@ return new class extends Migration
             $table->string('subject');
             $table->text('message');
             $table->timestamps();
+
+            $table->index(['email']); // For email-based lookups
+            $table->index(['created_at']); 
+            $table->index(['email', 'created_at']); 
         });
     }
 
