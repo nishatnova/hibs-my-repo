@@ -38,11 +38,12 @@ class ResetPasswordNotification extends Notification
         $resetUrl = env('FRONTEND_URL') . "/reset-password?token={$this->token}&email={$notifiable->email}";
 
         return (new MailMessage)
-            ->subject('Reset Your Password')
-            ->greeting('Hello!')
+            ->subject('🔐 Reset Your Password - Action Required')
+            ->greeting('Hello ' . ($notifiable->name ?? 'there') . '!')
             ->line('You are receiving this email because we received a password reset request for your account.')
             ->action('Reset Password', $resetUrl)
-            ->line('If you did not request a password reset, no further action is required.');
+            ->line('If you did not request a password reset, no further action is required.')
+            ->salutation('Best regards,  The ' . config('app.name', 'Hibs') . ' Team');
     }
 
     /**
