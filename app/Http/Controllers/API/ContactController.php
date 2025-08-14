@@ -25,7 +25,7 @@ class ContactController extends Controller
 
             $contact = Contact::create($request->all());
 
-            Mail::to(env('MAIL_FROM_ADDRESS'))->send(new ContactUsMail($contact));
+           Mail::to(env('ADMIN_EMAIL'))->send(new ContactUsMail($contact));
 
             return $this->sendResponse([
                 'contact' => $contact
