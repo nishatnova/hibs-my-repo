@@ -114,6 +114,21 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     }
 
 
+    public function leader()
+    {
+        return $this->hasOne(Leader::class);
+    }
+
+    /**
+     * Check if user is a leader.
+     */
+    public function isLeader()
+    {
+        return $this->role === 'leader' && $this->leader !== null;
+    }
+
+
+
     
 
 }
