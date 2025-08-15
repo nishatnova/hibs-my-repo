@@ -100,6 +100,64 @@ class AuthController extends Controller
         }
     }
 
+    public function googleLogin(Request $request)
+    {
+        try {
+            $request->validate([
+                'email' => 'required|email',
+                'name' => 'required|string',
+                'profile_photo' => 'required|string',
+            ]);
+
+            $userData = [
+                'name' => $request->name,
+                'profile_photo' => $request->profile_photo,
+            ];
+
+            if (!User::where('email', $request->email)->exists()) {
+                $userData['password'] = Hash::make(\Illuminate\Support\Str::random(16));
+                $userData['role'] = 'user';
+            }
+
+            $user = User::updateOrCreate(
+                ['email' => $request->email],
+                $userData
+            );
+            // Generate access and refresh tokens
+            JWTAuth::factory()->setTTL(2880); // 2 days
+            $accessToken = JWTAuth::fromUser($user);
+
+            JWTAuth::factory()->setTTL(20160); // 2 weeks
+            $refreshToken = JWTAuth::fromUser($user);
+
+            // Set the access token in a secure cookie
+            $cookie = Cookie::make(
+                'access_token',
+                $accessToken,
+                2880, // Expiration in minutes (2 days)
+                '/',
+                null,
+                true,
+                true,
+                false,
+                'Strict'
+            );
+
+            return $this->sendResponse([
+            'token' => $accessToken,
+            'refresh_token' => $refreshToken,
+            'token_type' => 'bearer',
+            'expires_in' => auth('api')->factory()->getTTL() * 60,
+            'user' => $user,
+            ], 'Logged in successfully.', 200)->cookie($cookie);;
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->sendError($e->validator->errors()->first(), [], 400);
+        } catch (\Exception $e) {
+            return $this->sendError('Error during Google login '. $e->getMessage(), [], 500);
+        }
+    }
+
     // Logout method
     public function logout()
     {
