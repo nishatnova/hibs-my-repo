@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('leader_id')->constrained('leaders')->onDelete('cascade');
             $table->string('chapter_name'); // Chapter Name
+            $table->string('image')->nullable(); 
             $table->string('contact_email')->nullable(); 
             $table->string('contact_phone')->nullable(); 
             $table->string('city')->nullable();
